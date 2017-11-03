@@ -42,7 +42,7 @@ def main():
     model = AlexNet(x, keep_prob, 1000, [])
 
     #define activation of last layer as score
-    feature = tf.reduce_max(model.conv5, axis=[1, 2])
+    feature = [tf.reduce_max(model.conv5, axis=[1, 2]), model.fc7]
 
     batchlst = mkbatch()
 
@@ -51,18 +51,22 @@ def main():
         model.load_initial_weights(sess)
 
         out_fea = []
+        out_fea2 = []
         for idx, batch in enumerate(batchlst):
             inp = getbatchdata(batch)
-            fea = sess.run(feature, feed_dict={x: inp, keep_prob: 1})
-            out_fea.append(fea)
+            fea1, fea2 = sess.run(feature, feed_dict={x: inp, keep_prob: 1})
+            out_fea.append(fea1)
+            out_fea2.append(fea2)
             # print(fea[0])
             if idx % 10 == 0:
                 print(idx, '/', len(batchlst))
 
 
         out_fea = np.concatenate(out_fea, 0)
+        out_fea2 = np.concatenate(out_fea, 0)
         print(out_fea.shape)
-        np.save('alex_fea.npz', out_fea)
+        np.savez('alex_fea1', out_fea)
+        np.savez('alex_fea2', out_fea2)
 
 
 if __name__ == "__main__":
