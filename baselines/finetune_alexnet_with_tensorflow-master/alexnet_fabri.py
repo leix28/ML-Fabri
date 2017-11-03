@@ -5,7 +5,7 @@ import tensorflow as tf
 from alexnet import AlexNet
 from caffe_classes import class_names
 
-BATCH_SIZE = 1
+BATCH_SIZE = 100
 
 def mkbatch():
     files = open('imgs.txt').readlines()
@@ -55,12 +55,12 @@ def main():
             inp = getbatchdata(batch)
             fea = sess.run(feature, feed_dict={x: inp, keep_prob: 1})
             out_fea.append(fea)
-            print(fea[0])
+            # print(fea[0])
             if idx % 10 == 0:
                 print(idx, '/', len(batchlst))
 
 
-        out_fea = np.concat(out_fea, 0)
+        out_fea = np.concatenate(out_fea, 0)
         print(out_fea.shape)
         np.save('alex_fea.npz', out_fea)
 
