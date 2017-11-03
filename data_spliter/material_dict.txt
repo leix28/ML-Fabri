@@ -1,0 +1,21 @@
+id	type	count
+9	gaberdine	10
+6	broad cloth	7
+16	fleece	3
+8	other	17
+15	denim	7
+13	fur	5
+7	parka	6
+17	satin	5
+0	woven	12
+10	suit	8
+5	velvet	7
+1	polyester	12
+11	knit	12
+2	crepe	9
+14	wool	12
+4	cotton	9
+19	net	3
+12	leather	2
+3	flanell	4
+18	corduroy	3
