@@ -54,7 +54,7 @@ def main():
         out_fea2 = []
         for idx, batch in enumerate(batchlst):
             inp = getbatchdata(batch)
-            fea1, fea2 = sess.run(feature, feed_dict={x: inp, keep_prob: 1})
+            fea1, fea2 = sess.run(feature, feed_dict={x: inp - imagenet_mean, keep_prob: 1})
             out_fea.append(fea1)
             out_fea2.append(fea2)
             # print(fea[0])
