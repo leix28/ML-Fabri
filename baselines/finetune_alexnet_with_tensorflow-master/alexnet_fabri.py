@@ -63,8 +63,9 @@ def main():
 
 
         out_fea = np.concatenate(out_fea, 0)
-        out_fea2 = np.concatenate(out_fea, 0)
+        out_fea2 = np.concatenate(out_fea2, 0)
         print(out_fea.shape)
+        print(out_fea2.shape)
         np.savez('alex_fea1', out_fea)
         np.savez('alex_fea2', out_fea2)
 
