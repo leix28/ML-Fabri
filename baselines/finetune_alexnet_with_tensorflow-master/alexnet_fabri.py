@@ -8,12 +8,12 @@ from caffe_classes import class_names
 BATCH_SIZE = 100
 
 def mkbatch():
-    files = open('imgs.txt').readlines()
+    files = open('material_dataset.txt').readlines()
+    files = [s.split()[0] for s in files]
     cnt = len(files) // BATCH_SIZE
     if len(files) % BATCH_SIZE != 0:
         cnt += 1
 
-    files = [item[:-1] for item in files]
     batchlist = []
     for i in range(cnt):
         batchlist.append(files[i*BATCH_SIZE:(i+1)*BATCH_SIZE])
@@ -50,24 +50,19 @@ def main():
         sess.run(tf.global_variables_initializer())
         model.load_initial_weights(sess)
 
-        out_fea = []
         out_fea2 = []
         for idx, batch in enumerate(batchlst):
             inp = getbatchdata(batch)
             fea1, fea2 = sess.run(feature, feed_dict={x: inp - imagenet_mean, keep_prob: 1})
-            out_fea.append(fea1)
             out_fea2.append(fea2)
             # print(fea[0])
             if idx % 10 == 0:
                 print(idx, '/', len(batchlst))
 
 
-        out_fea = np.concatenate(out_fea, 0)
         out_fea2 = np.concatenate(out_fea2, 0)
-        print(out_fea.shape)
         print(out_fea2.shape)
-        np.savez('alex_fea1', out_fea)
-        np.savez('alex_fea2', out_fea2)
+        np.savez('alex_fea', out_fea2)
 
 
 if __name__ == "__main__":
