@@ -8,12 +8,12 @@ import cv2
 BATCH_SIZE = 100
 
 def mkbatch():
-    files = open('imgs.txt').readlines()
+    files = open('material_dataset.txt').readlines()
     cnt = len(files) // BATCH_SIZE
     if len(files) % BATCH_SIZE != 0:
         cnt += 1
 
-    files = [item[:-1] for item in files]
+    files = [item.split()[0] for item in files]
     batchlist = []
     for i in range(cnt):
         batchlist.append(files[i*BATCH_SIZE:(i+1)*BATCH_SIZE])
