@@ -21,21 +21,24 @@ __all__ = ['Fabri']
 
 
 class Fabri(RNGDataFlow):
-    def __init__(self, train_or_test, shuffle=True, dir='./data'):
-        assert train_or_test in ['train', 'val']
+    def __init__(self, train_or_test, shuffle=True, dir='../../data'):
+        assert train_or_test in ['train', 'val', 'test']
         assert dir is not None
         self.data = []
         if train_or_test == 'train':
             fnames = 'train.txt'
-        else:
+        elif train_or_test == 'val':
             fnames = 'val.txt'
-        with open(os.path.join((dir, 'dataset', fnames))) as f:
-            for line in f.readlines():
+        else:
+	    fnames = 'test.txt'
+        with open(os.path.join(dir, fnames)) as f:
+            for idx, line in enumerate(f.readlines()):
                 fn, label = line.strip().split()
-                fn = os.path.join(dir, fn)
+                fn = os.path.join(dir, 'dataset',fn)
                 if not os.path.isfile(fn):
                     raise ValueError('Failed to find file: ' + fn)
                 img = cv2.imread(fn)
+		img = cv2.resize(img, (224, 224))
                 self.data.append([img, int(label)])
         self.train_or_test = train_or_test
         self.shuffle = shuffle

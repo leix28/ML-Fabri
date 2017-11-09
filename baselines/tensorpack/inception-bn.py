@@ -13,10 +13,12 @@ os.environ['TENSORPACK_TRAIN_API'] = 'v2'   # will become default soon
 from tensorpack import *
 from tensorpack.tfutils.symbolic_functions import *
 from tensorpack.tfutils.summary import *
+from tensorpack.train import *
 from tensorpack.dataflow import dataset
 
 from tensorpack.predict import PredictConfig, SimpleDatasetPredictor
 from tensorpack.utils.stats import RatioCounter
+from fabri import Fabri 
 
 
 TOTAL_BATCH_SIZE = 48
@@ -124,23 +126,23 @@ class Model(ModelDesc):
 
 def get_data(train_or_test):
     isTrain = train_or_test == 'train'
-    ds = dataset.Fabri(train_or_test)
+    ds = Fabri(train_or_test)
     pp_mean = ds.get_per_pixel_mean()
 
     if isTrain:
         # TODO use the augmentor in GoogleNet
         augmentors = [
-            imgaug.Resize((256, 256)),
+            imgaug.MapImage(lambda x: x - pp_mean),
+	    imgaug.Resize((256, 256)),
             imgaug.Brightness(30, False),
             imgaug.Contrast((0.8, 1.2), True),
-            imgaug.MapImage(lambda x: x - pp_mean),
             imgaug.RandomCrop((224, 224)),
             imgaug.Flip(horiz=True),
         ]
     else:
         augmentors = [
-            imgaug.Resize((256, 256)),
             imgaug.MapImage(lambda x: x - pp_mean),
+            imgaug.Resize((256, 256)),
             imgaug.CenterCrop((224, 224)),
         ]
     ds = AugmentImageComponent(ds, augmentors, copy=False)
@@ -210,7 +212,9 @@ if __name__ == '__main__':
         nr_tower = len(args.gpu.split(','))
         assert nr_tower == NR_GPU
     if args.eval:
-        ds = get_data('test')
+        ds = Fabri('test')
         eval_model(model, get_model_loader(args.load), ds)
     else:
-        launch_train_with_config(config, SyncMultiGPUTrainer(NR_GPU))
+ #       launch_train_with_config(config, SyncMultiGPUTrainer(NR_GPU))
+        SyncMultiGPUTrainer(config).train()
+

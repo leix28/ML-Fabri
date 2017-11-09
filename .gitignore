@@ -103,3 +103,4 @@ ENV/
 .ipynb_checkpoints/
 
 dataset/
+train_log
