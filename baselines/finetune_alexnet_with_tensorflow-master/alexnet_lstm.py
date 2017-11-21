@@ -132,7 +132,7 @@ def main(_):
         l2_loss = tf.add_n([ tf.nn.l2_loss(v) for v in varss]) * 0.0001
 
         loss = entropy + l2_loss
-        opt = tf.train.MomentumOptimizer(0.001, 0.9)
+        opt = tf.train.MomentumOptimizer(0.0001, 0.9)
         opt_op = opt.minimize(loss)
 
         saver = tf.train.Saver()
@@ -190,18 +190,31 @@ def main(_):
             data = Dataset([2])
             test_acc = 0
             test_count = 0
+            test_acc_3 = 0
+
+            def compute_acc(x, y):
+                z = np.asarray([v in u for u, v in zip(x, y)], dtype='float32')
+                return np.sum(z)
+
             for i in range(data.get_test_batch_num()):
                 img_batch, label_batch = data.get_test(i)
                 predict = sess.run(logits, feed_dict={x: img_batch - imagenet_mean,
                                                     y: label_batch,
                                                     keep_prob: 1.})
+
+                pretop3 = np.argsort(predict)[:, -3:]
+
                 correct = np.sum(np.argmax(predict, axis=1) == label_batch)
-                print(np.argmax(predict, axis=1), label_batch)
+
                 test_acc += correct
+                test_acc_3 += compute_acc(pretop3, label_batch)
                 test_count += len(label_batch)
+                if i % 100 == 0:
+                    print(i, test_acc / test_count, test_acc_3 / test_count)
 
             test_acc /= test_count
-            print(test_acc)
+            test_acc_3 /= test_count
+            print(test_acc, test_acc_3)
 
 
 if __name__ == "__main__":
