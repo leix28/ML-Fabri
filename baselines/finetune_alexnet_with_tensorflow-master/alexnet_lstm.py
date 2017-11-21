@@ -11,14 +11,26 @@ SEQ_LEN = 10
 LSTM_SIZE = 100
 checkpoint_path = "checkpoints"
 
+FLAGS = tf.app.flags.FLAGS
+
+
 class Dataset(object):
-    def __init__(self):
+    def __init__(self, sets=[0, 1, 2]):
         self.rng = np.random
         with open('material_dataset.txt') as f:
             imglist = f.readlines()
         imglist = [item.split() for item in imglist]
 
-        def load(lst):
+        def load(lst, shortcut):
+            if lst == []:
+                return None
+            try:
+                out = np.load(shortcut)['arr_0']
+                print("use ", shortcut)
+                return out
+            except:
+                pass
+
             out = np.zeros((len(lst), 227, 227, 3), dtype='uint8')
             for idx, item in enumerate(lst):
                 im = cv2.imread('data/'+item[0])
@@ -26,14 +38,15 @@ class Dataset(object):
                 out[idx] = im
                 if idx % 1000 == 0:
                     print("load {}/{}".format(idx, len(lst)))
+            np.savez(shortcut, out)
             return out
 
-        self.train = list(filter(lambda x: x[2] == '0', imglist))
-        self.train_img = load(self.train)
-        self.val = list(filter(lambda x: x[2] == '1', imglist))
-        self.val_img = load(self.val)
-        self.test = list(filter(lambda x: x[2] == '2', imglist))
-        self.test_img = load(self.test)
+        self.train = list(filter(lambda x: x[2] == '0', imglist)) if 0 in sets else []
+        self.train_img = load(self.train, shortcut='preload/train.npz')
+        self.val = list(filter(lambda x: x[2] == '1', imglist)) if 1 in sets else []
+        self.val_img = load(self.val, shortcut='preload/val.npz')
+        self.test = list(filter(lambda x: x[2] == '2', imglist)) if 2 in sets else []
+        self.test_img = load(self.test, shortcut='preload/test.npz')
 
         self.train.sort(key=lambda x: x[0])
         self.val.sort(key=lambda x: x[0])
@@ -78,7 +91,21 @@ class Dataset(object):
             imgs[i] = self.val_img[data[i]:data[i]+SEQ_LEN]
         return imgs.reshape((BATCH_SIZE * SEQ_LEN, 227, 227, 3)), lb
 
-def main():
+    def get_test_batch_num(self):
+        return len(self.test_examples) // BATCH_SIZE
+
+    def get_test(self, idx):
+        data = self.test_examples[idx*BATCH_SIZE:(idx+1)*BATCH_SIZE]
+
+        imgs = np.zeros((BATCH_SIZE, SEQ_LEN, 227, 227, 3))
+        lb = np.zeros(BATCH_SIZE, dtype='int32')
+
+        for i in range(BATCH_SIZE):
+            lb[i] = int(self.test[data[i]][1])
+            imgs[i] = self.test_img[data[i]:data[i]+SEQ_LEN]
+        return imgs.reshape((BATCH_SIZE * SEQ_LEN, 227, 227, 3)), lb
+
+def main(_):
     imagenet_mean = np.array([104., 117., 124.], dtype=np.float32)
 
     x = tf.placeholder(tf.float32, [None, 227, 227, 3])
@@ -87,8 +114,6 @@ def main():
 
     #create model with default config ( == no skip_layer and 1000 units in the last layer)
     model = AlexNet(x, keep_prob, 1000, [])
-
-    data = Dataset()
 
     log = open('log.txt', 'w')
 
@@ -107,7 +132,7 @@ def main():
         l2_loss = tf.add_n([ tf.nn.l2_loss(v) for v in varss]) * 0.0001
 
         loss = entropy + l2_loss
-        opt = tf.train.GradientDescentOptimizer(0.01)
+        opt = tf.train.MomentumOptimizer(0.001, 0.9)
         opt_op = opt.minimize(loss)
 
         saver = tf.train.Saver()
@@ -115,48 +140,72 @@ def main():
         sess.run(tf.global_variables_initializer())
         model.load_initial_weights(sess)
 
+        if FLAGS.load != '':
+            print("load model from", FLAGS.load)
+            saver.restore(sess, FLAGS.load)
         print("Model set up.")
 
-        gLoss = []
-        for epoch in range(100):
-            print("Epoch number: {}".format(epoch+1))
-            for step in range(100):
-                img_batch, label_batch = data.get_next_train()
-                lossv, _ = sess.run((entropy, opt_op), feed_dict={x: img_batch - imagenet_mean,
-                                                                    y: label_batch,
-                                                                    keep_prob: 0.5})
-                gLoss = gLoss + [lossv]
-                gLoss = gLoss[-10:]
-                if step % 10 == 0:
-                    print(epoch, step, np.mean(gLoss))
+        if not FLAGS.run:
+            data = Dataset([0, 1])
+            gLoss = []
+            for epoch in range(40):
+                print("Epoch number: {}".format(epoch+1))
+                for step in range(20000):
+                    img_batch, label_batch = data.get_next_train()
+                    lossv, _ = sess.run((entropy, opt_op), feed_dict={x: img_batch - imagenet_mean,
+                                                                        y: label_batch,
+                                                                        keep_prob: 0.5})
+                    gLoss = gLoss + [lossv]
+                    gLoss = gLoss[-50:]
+                    if step % 100 == 0:
+                        print(epoch, step, np.mean(gLoss))
 
-            # Validate the model on the entire validation set
-            print("Start validation")
-            test_acc = 0.
+                # Validate the model on the entire validation set
+                print("Start validation")
+                test_acc = 0.
+                test_count = 0
+
+                for i in range(data.get_val_batch_num()):
+                    img_batch, label_batch = data.get_val(i)
+                    predict = sess.run(logits, feed_dict={x: img_batch - imagenet_mean,
+                                                        y: label_batch,
+                                                        keep_prob: 1.})
+                    correct = np.sum(np.argmax(predict, axis=1) == label_batch)
+                    test_acc += correct
+                    test_count += len(label_batch)
+                    if i % 100 == 0:
+                        print(i, test_acc / test_count)
+
+                test_acc /= test_count
+                print("Validation Accuracy = {:.4f}".format(test_acc))
+                print("Saving checkpoint of model...")
+
+                print("Epoch {}, Val {}".format(epoch+1, test_acc * 100), file=log)
+                # save checkpoint of the model
+                checkpoint_name = os.path.join(checkpoint_path,
+                                               'model_epoch'+str(epoch+1)+'.ckpt')
+                save_path = saver.save(sess, checkpoint_name)
+
+        else:
+            data = Dataset([2])
+            test_acc = 0
             test_count = 0
-
-            for i in range(data.get_val_batch_num()):
-                img_batch, label_batch = data.get_val(i)
-                predict = sess.run(logits, feed_dict={x: img_batch,
+            for i in range(data.get_test_batch_num()):
+                img_batch, label_batch = data.get_test(i)
+                predict = sess.run(logits, feed_dict={x: img_batch - imagenet_mean,
                                                     y: label_batch,
                                                     keep_prob: 1.})
-                correct = np.sum(np.argmax(predict) == label_batch)
+                correct = np.sum(np.argmax(predict, axis=1) == label_batch)
+                print(np.argmax(predict, axis=1), label_batch)
                 test_acc += correct
                 test_count += len(label_batch)
 
             test_acc /= test_count
-            print("Validation Accuracy = {:.4f}".format(test_acc))
-            print("Saving checkpoint of model...")
-
-            print("Epoch {}, Val {}".format(epoch+1, test_acc * 100), file=log)
-            # save checkpoint of the model
-            checkpoint_name = os.path.join(checkpoint_path,
-                                           'model_epoch'+str(epoch+1)+'.ckpt')
-            save_path = saver.save(sess, checkpoint_name)
-
-            # print("{} Model checkpoint saved at {}".format(datetime.now(),
-            #                                                checkpoint_name))
+            print(test_acc)
 
 
 if __name__ == "__main__":
-    main()
+    tf.app.flags.DEFINE_string('load', '', 'load model')
+    tf.app.flags.DEFINE_boolean('run', False, 'run test')
+
+    tf.app.run()
