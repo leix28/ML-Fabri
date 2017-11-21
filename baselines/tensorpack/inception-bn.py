@@ -29,7 +29,7 @@ INPUT_SHAPE = 224
 
 class Model(ModelDesc):
     def _get_inputs(self):
-        return [InputDesc(tf.float32, [None, INPUT_SHAPE, INPUT_SHAPE, 3], 'input'),
+        return [InputDesc(tf.float32, [None, INPUT_SHAPE, INPUT_SHAPE, 3*15], 'input'),
                 InputDesc(tf.int32, [None], 'label')]
 
     def _build_graph(self, inputs):
