@@ -42,16 +42,16 @@ class Dataset(object):
             return out
 
         self.train = list(filter(lambda x: x[2] == '0', imglist)) if 0 in sets else []
-        self.train_img = load(self.train, shortcut='preload/train.npz')
         self.val = list(filter(lambda x: x[2] == '1', imglist)) if 1 in sets else []
-        self.val_img = load(self.val, shortcut='preload/val.npz')
         self.test = list(filter(lambda x: x[2] == '2', imglist)) if 2 in sets else []
-        self.test_img = load(self.test, shortcut='preload/test.npz')
 
         self.train.sort(key=lambda x: x[0])
         self.val.sort(key=lambda x: x[0])
         self.test.sort(key=lambda x: x[0])
 
+        self.train_img = load(self.train, shortcut='preload/train.npz')
+        self.val_img = load(self.val, shortcut='preload/val.npz')
+        self.test_img = load(self.test, shortcut='preload/test.npz')
 
         def genlist(data):
             n = len(data)
