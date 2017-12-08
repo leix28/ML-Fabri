@@ -9,7 +9,8 @@ import time
 BATCH_SIZE = 2
 SEQ_LEN = 10
 LSTM_SIZE = 100
-checkpoint_path = "checkpoints"
+checkpoint_path = "checkpoints_ran"
+TEST_RAN = 10
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -21,32 +22,9 @@ class Dataset(object):
             imglist = f.readlines()
         imglist = [item.split() for item in imglist]
 
-        def load(lst, shortcut):
-            if lst == []:
-                return None
-            try:
-                out = np.load(shortcut)['arr_0']
-                print("use ", shortcut)
-                return out
-            except:
-                pass
-
-            out = np.zeros((len(lst), 227, 227, 3), dtype='uint8')
-            for idx, item in enumerate(lst):
-                im = cv2.imread('data/'+item[0])
-                im = im[246:473, 366:593]
-                out[idx] = im
-                if idx % 1000 == 0:
-                    print("load {}/{}".format(idx, len(lst)))
-            np.savez(shortcut, out)
-            return out
-
         self.train = list(filter(lambda x: x[2] == '0', imglist)) if 0 in sets else []
-        self.train_img = load(self.train, shortcut='preload/train.npz')
         self.val = list(filter(lambda x: x[2] == '1', imglist)) if 1 in sets else []
-        self.val_img = load(self.val, shortcut='preload/val.npz')
         self.test = list(filter(lambda x: x[2] == '2', imglist)) if 2 in sets else []
-        self.test_img = load(self.test, shortcut='preload/test.npz')
 
         self.train.sort(key=lambda x: x[0])
         self.val.sort(key=lambda x: x[0])
@@ -64,8 +42,29 @@ class Dataset(object):
         self.train_examples = genlist(self.train)
         self.val_examples = genlist(self.val)
         self.test_examples = genlist(self.test)
+        self.test_examples = self.test_examples * TEST_RAN
         print(len(self.train_examples), len(self.val_examples), len(self.test_examples))
 
+    def random_crop(self, lst, id):
+        out = np.zeros((SEQ_LEN, 227, 227, 3), dtype='uint8')
+        cx = np.random.randint(600-227)
+        cy = np.random.randint(600-227)
+        
+        for id, item in enumerate(lst[id:id+SEQ_LEN]):
+            im = cv2.imread('data/'+item[0])
+            im = im[60:660, 180:780]
+            out[id] = im[cx:cx+227, cy:cy+227]
+        return out
+    
+    def center_crop(self, lst, id):
+        out = np.zeros((SEQ_LEN, 227, 227, 3), dtype='uint8')
+        
+        for id, item in enumerate(lst[id:id+SEQ_LEN]):
+            im = cv2.imread('data/'+item[0])
+            im = im[246:473, 366:593]
+            out[id] = im
+        return out
+        
     def get_next_train(self):
         data = self.rng.choice(self.train_examples, BATCH_SIZE)
 
@@ -74,7 +73,7 @@ class Dataset(object):
 
         for i in range(BATCH_SIZE):
             lb[i] = int(self.train[data[i]][1])
-            imgs[i] = self.train_img[data[i]:data[i]+SEQ_LEN]
+            imgs[i] = self.random_crop(self.train, data[i])
         return imgs.reshape((BATCH_SIZE * SEQ_LEN, 227, 227, 3)), lb
 
     def get_val_batch_num(self):
@@ -88,9 +87,12 @@ class Dataset(object):
 
         for i in range(BATCH_SIZE):
             lb[i] = int(self.val[data[i]][1])
-            imgs[i] = self.val_img[data[i]:data[i]+SEQ_LEN]
+            imgs[i] = self.center_crop(self.val, data[i])
         return imgs.reshape((BATCH_SIZE * SEQ_LEN, 227, 227, 3)), lb
 
+    def get_test_max_id(self):
+        return np.max(self.test_examples)
+    
     def get_test_batch_num(self):
         return len(self.test_examples) // BATCH_SIZE
 
@@ -102,8 +104,8 @@ class Dataset(object):
 
         for i in range(BATCH_SIZE):
             lb[i] = int(self.test[data[i]][1])
-            imgs[i] = self.test_img[data[i]:data[i]+SEQ_LEN]
-        return imgs.reshape((BATCH_SIZE * SEQ_LEN, 227, 227, 3)), lb
+            imgs[i] = self.random_crop(self.test, data[i])
+        return imgs.reshape((BATCH_SIZE * SEQ_LEN, 227, 227, 3)), lb, data
 
 def main(_):
     imagenet_mean = np.array([104., 117., 124.], dtype=np.float32)
@@ -126,6 +128,7 @@ def main(_):
 
         with tf.variable_scope('softmax'):
             logits = tf.contrib.layers.fully_connected(outputs[:, -1, :], 14, activation_fn=None)
+        softmax_prob = tf.nn.softmax(logits)
         entropy = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits))
 
         varss = tf.trainable_variables()
@@ -148,7 +151,7 @@ def main(_):
         if not FLAGS.run:
             data = Dataset([0, 1])
             gLoss = []
-            for epoch in range(40):
+            for epoch in range(10):
                 print("Epoch number: {}".format(epoch+1))
                 for step in range(20000):
                     img_batch, label_batch = data.get_next_train()
@@ -186,8 +189,8 @@ def main(_):
                                                'model_epoch'+str(epoch+1)+'.ckpt')
                 save_path = saver.save(sess, checkpoint_name)
 
-        else:
-            data = Dataset([2])
+        elif FLAGS.run == 'val':
+            data = Dataset([1])
             test_acc = 0
             test_count = 0
             test_acc_3 = 0
@@ -195,9 +198,9 @@ def main(_):
             def compute_acc(x, y):
                 z = np.asarray([v in u for u, v in zip(x, y)], dtype='float32')
                 return np.sum(z)
-
-            for i in range(data.get_test_batch_num()):
-                img_batch, label_batch = data.get_test(i)
+            
+            for i in range(data.get_val_batch_num()):
+                img_batch, label_batch = data.get_val(i)
                 predict = sess.run(logits, feed_dict={x: img_batch - imagenet_mean,
                                                     y: label_batch,
                                                     keep_prob: 1.})
@@ -215,10 +218,39 @@ def main(_):
             test_acc /= test_count
             test_acc_3 /= test_count
             print(test_acc, test_acc_3)
+        else:
+            data = Dataset([2])
+            test_acc = 0
+            test_count = 0
+            test_acc_3 = 0
 
+            def compute_acc(x, y):
+                z = np.asarray([v in u for u, v in zip(x, y)], dtype='float32')
+                return z
+
+            def compute_topk(x, y, k):
+                pretopk = np.argsort(x)[:, -k:]
+                acc = compute_acc(pretopk[y != -1], y[y != -1])
+                return np.mean(acc)
+                
+                
+            score = np.zeros((data.get_test_max_id() + 1, 14))
+            label = -np.ones(data.get_test_max_id() + 1, dtype='int32')
+            
+            for i in range(data.get_test_batch_num()):
+                img_batch, label_batch, idx = data.get_test(i)
+                predict = sess.run(softmax_prob, feed_dict={x: img_batch - imagenet_mean,
+                                                        y: label_batch,
+                                                        keep_prob: 1.})
+                score[idx] += predict
+                label[idx] = label_batch
+                if i % 100 == 0:
+                    print(i, compute_topk(score, label, 1), compute_topk(score, label, 3))
+                
+            print("final", compute_topk(score, label, 1), compute_topk(score, label, 3))
 
 if __name__ == "__main__":
     tf.app.flags.DEFINE_string('load', '', 'load model')
-    tf.app.flags.DEFINE_boolean('run', False, 'run test')
+    tf.app.flags.DEFINE_string('run', '', 'run test')
 
     tf.app.run()

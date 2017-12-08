@@ -148,7 +148,7 @@ def main(_):
         if not FLAGS.run:
             data = Dataset([0, 1])
             gLoss = []
-            for epoch in range(40):
+            for epoch in range(10):
                 print("Epoch number: {}".format(epoch+1))
                 for step in range(20000):
                     img_batch, label_batch = data.get_next_train()
