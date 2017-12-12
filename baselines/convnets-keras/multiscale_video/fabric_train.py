@@ -56,8 +56,8 @@ weights_fn = '../../../../storage/alexnet_weights.h5'
 sz = 128
 img_rows = sz
 img_cols = sz
-#rescale = [1.0, 1.5, 2.0]
-rescale = [1, 2, 4]
+rescale = [1.0, 1.5, 2.0]
+#rescale = [1, 2, 4]
 img_channels = 3 * len(rescale)
 
 with tf.device('/gpu:0'):
