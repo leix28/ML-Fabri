@@ -168,7 +168,7 @@ if data_augmentation:
         log_fn = log_dir + '{:02d}'.format(epochs) + '_{:.4f}_{:.4f}'.format(val_acc[1], test_acc[1]) + '.txt'
         print_log(y_pred_test, Z_test, log_fn, k=k)
 
-        print(val_acc, test_acc)
+        print(epochs, val_acc, test_acc)
 
 
 
