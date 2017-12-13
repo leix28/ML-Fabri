@@ -45,11 +45,11 @@ class Fabri3D(RNGDataFlow):
                 self.data[name].append(img)
                 self.label[name].append(label)
         for key in self.data.keys():
-            if len(self.data[key]) < 15:
+            if len(self.data[key]) < 10:
                 del self.data[key]
                 del self.label[key]
             else:
-                self.data[key] = np.array(self.data[key][:15]).reshape((224, 244, 15*3))
+                self.data[key] = np.array(self.data[key][:10]).reshape((224, 244, 10, 3))
         self.train_or_test = train_or_test
         self.shuffle = shuffle
 

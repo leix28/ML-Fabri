@@ -10,7 +10,7 @@ import time
 BATCH_SIZE = 2
 SEQ_LEN = 10
 LSTM_SIZE = 100
-checkpoint_path = "checkpoints_ran"
+checkpoint_path = "checkpoints_ran_multi"
 TEST_RAN = 10
 
 FLAGS = tf.app.flags.FLAGS
@@ -19,7 +19,7 @@ FLAGS = tf.app.flags.FLAGS
 class Dataset(object):
     def __init__(self, sets=[0, 1, 2]):
         self.rng = np.random
-        with open('material_dataset.txt') as f:
+        with open('material_dataset_multi.txt') as f:
             imglist = f.readlines()
         imglist = [item.split() for item in imglist]
 
@@ -119,6 +119,7 @@ def main(_):
 
     x = tf.placeholder(tf.float32, [None, 227, 227, 3])
     y = tf.placeholder(tf.int32, [None])
+    y_wash = tf.placeholder(tf.int32, [None])
     keep_prob = tf.placeholder(tf.float32)
 
     #create model with default config ( == no skip_layer and 1000 units in the last layer)
@@ -135,13 +136,18 @@ def main(_):
 
         with tf.variable_scope('softmax'):
             logits = tf.contrib.layers.fully_connected(outputs[:, -1, :], 14, activation_fn=None)
+        with tf.variable_scope('softmax_wash'):
+            logits_wash = tf.contrib.layers.fully_connected(outputs[:, -1, :], 5, activation_fn=None)
         softmax_prob = tf.nn.softmax(logits)
+        softmax_wash_prob = tf.nn.softmax(logits_wash)
+
         entropy = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits))
+        entropy_wash = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_wash, logits=logits_wash))
 
         varss = tf.trainable_variables()
         l2_loss = tf.add_n([ tf.nn.l2_loss(v) for v in varss]) * 0.0001
 
-        loss = entropy + l2_loss
+        loss = 0.7*entropy + 0.3*entropy_wash + l2_loss
         opt = tf.train.MomentumOptimizer(0.0001, 0.9)
         opt_op = opt.minimize(loss)
 
@@ -158,28 +164,33 @@ def main(_):
         if not FLAGS.run:
             data = Dataset([0, 1])
             gLoss = []
+            gLoss_wash = []
             for epoch in range(10):
                 print("Epoch number: {}".format(epoch+1))
                 for step in range(20000):
-                    img_batch, label_batch = data.get_next_train()
-                    lossv, _ = sess.run((entropy, opt_op), feed_dict={x: img_batch - imagenet_mean,
+                    img_batch, label_batch, label_wash_batch = data.get_next_train()
+                    lossv, lossv_wash, _ = sess.run((entropy, entropy_wash, opt_op), feed_dict={x: img_batch - imagenet_mean,
                                                                         y: label_batch,
+                                                                        y_wash: label_wash_batch,
                                                                         keep_prob: 0.5})
                     gLoss = gLoss + [lossv]
                     gLoss = gLoss[-50:]
+                    gLoss_wash = gLoss_wash + [lossv_wash]
+                    gLoss_wash = gLoss_wash[-50:]
                     if step % 100 == 0:
                         print(epoch, step, np.mean(gLoss))
-
+                        print(epoch, step, np.mean(gLoss_wash))
                 # Validate the model on the entire validation set
                 print("Start validation")
                 test_acc = 0.
                 test_count = 0
 
                 for i in range(data.get_val_batch_num()):
-                    img_batch, label_batch = data.get_val(i)
-                    predict = sess.run(logits, feed_dict={x: img_batch - imagenet_mean,
-                                                        y: label_batch,
-                                                        keep_prob: 1.})
+                    img_batch, label_batch, label_wash_batch = data.get_val(i)
+                    predict, predict_wash = sess.run((logits, logits_wash), feed_dict={x: img_batch - imagenet_mean,
+                                                     y: label_batch,
+                                                     y_wash: label_wash_batch,
+                                                     keep_prob: 1.})
                     correct = np.sum(np.argmax(predict, axis=1) == label_batch)
                     test_acc += correct
                     test_count += len(label_batch)
@@ -207,9 +218,10 @@ def main(_):
                 return np.sum(z)
             
             for i in range(data.get_val_batch_num()):
-                img_batch, label_batch = data.get_val(i)
-                predict = sess.run(logits, feed_dict={x: img_batch - imagenet_mean,
+                img_batch, label_batch, label_wash = data.get_val(i)
+                predict, predict_wash = sess.run((logits, logits_wash), feed_dict={x: img_batch - imagenet_mean,
                                                     y: label_batch,
+                                                    y_wash: label_wash_batch,
                                                     keep_prob: 1.})
 
                 pretop3 = np.argsort(predict)[:, -3:]
@@ -245,9 +257,10 @@ def main(_):
             label = -np.ones(data.get_test_max_id() + 1, dtype='int32')
             
             for i in range(data.get_test_batch_num()):
-                img_batch, label_batch, idx = data.get_test(i)
+                img_batch, label_batch, label_wash_batch, idx = data.get_test(i)
                 predict = sess.run(softmax_prob, feed_dict={x: img_batch - imagenet_mean,
                                                         y: label_batch,
+                                                        y_wash: label_wash_batch,
                                                         keep_prob: 1.})
                 score[idx] += predict
                 label[idx] = label_batch
